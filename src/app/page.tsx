@@ -1,96 +1,72 @@
 "use client";
 
-import { useState, useEffect } from "react";
-
-declare global {
-  interface Window {
-    Telegram?: {
-      WebApp: {
-        ready: () => void;
-        expand: () => void;
-        themeParams: {
-          bg_color?: string;
-          text_color?: string;
-          button_color?: string;
-          button_text_color?: string;
-        };
-      };
-    };
-  }
-}
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { initTelegramApp, getUserName, getThemeParams } from "@/lib/telegram";
+import { api } from "@/lib/api";
+import { Trainer } from "@/lib/types";
+import { Button } from "@/components/Button";
+import { Loading } from "@/components/Loading";
 
 export default function Home() {
-  const [currentTime, setCurrentTime] = useState<string | null>(null);
+  const router = useRouter();
+  const [trainer, setTrainer] = useState<Trainer | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Initialize Telegram Mini App
-    if (typeof window !== "undefined" && window.Telegram?.WebApp) {
-      window.Telegram.WebApp.ready();
-      window.Telegram.WebApp.expand();
+    initTelegramApp();
 
-      // Apply Telegram theme colors
-      const themeParams = window.Telegram.WebApp.themeParams;
-      if (themeParams.bg_color) {
-        document.documentElement.style.setProperty(
-          "--tg-theme-bg-color",
-          themeParams.bg_color
-        );
-      }
-      if (themeParams.text_color) {
-        document.documentElement.style.setProperty(
-          "--tg-theme-text-color",
-          themeParams.text_color
-        );
-      }
-      if (themeParams.button_color) {
-        document.documentElement.style.setProperty(
-          "--tg-theme-button-color",
-          themeParams.button_color
-        );
-      }
-      if (themeParams.button_text_color) {
-        document.documentElement.style.setProperty(
-          "--tg-theme-button-text-color",
-          themeParams.button_text_color
-        );
-      }
-    }
+    // Apply Telegram theme
+    const params = getThemeParams();
+    const root = document.documentElement;
+    if (params.bg_color) root.style.setProperty("--tg-theme-bg-color", params.bg_color);
+    if (params.text_color) root.style.setProperty("--tg-theme-text-color", params.text_color);
+    if (params.hint_color) root.style.setProperty("--tg-theme-hint-color", params.hint_color);
+    if (params.link_color) root.style.setProperty("--tg-theme-link-color", params.link_color);
+    if (params.button_color) root.style.setProperty("--tg-theme-button-color", params.button_color);
+    if (params.button_text_color) root.style.setProperty("--tg-theme-button-text-color", params.button_text_color);
+    if (params.secondary_bg_color) root.style.setProperty("--tg-theme-secondary-bg-color", params.secondary_bg_color);
+
+    // Load trainer info
+    api.getTrainer().then((t) => {
+      setTrainer(t);
+      setIsLoading(false);
+    });
   }, []);
 
-  const handleShowTime = () => {
-    const now = new Date();
-    const formatted = now.toLocaleString("en-US", {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
-    setCurrentTime(formatted);
-  };
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loading />
+      </div>
+    );
+  }
+
+  const userName = getUserName();
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-8">
-      <h1 className="text-4xl font-bold mb-8">Scheduler</h1>
+    <div className="min-h-screen p-4 flex flex-col">
+      {/* Header */}
+      <div className="mb-8">
+        <p className="text-[var(--tg-theme-hint-color)] text-sm">Добро пожаловать, {userName}</p>
+        <h1 className="text-2xl font-bold mt-1">Тренер {trainer?.name}</h1>
+      </div>
 
-      <button
-        onClick={handleShowTime}
-        className="px-6 py-3 rounded-lg text-lg font-medium transition-all hover:opacity-90 active:scale-95"
-        style={{
-          backgroundColor: "var(--tg-theme-button-color)",
-          color: "var(--tg-theme-button-text-color)",
-        }}
-      >
-        Current Time
-      </button>
+      {/* Actions */}
+      <div className="flex flex-col gap-4 flex-1">
+        <Button fullWidth onClick={() => router.push("/book")}>
+          Записаться на тренировку
+        </Button>
 
-      {currentTime && (
-        <div className="mt-8 p-4 rounded-lg bg-gray-100 dark:bg-gray-800">
-          <p className="text-xl text-center">{currentTime}</p>
-        </div>
-      )}
+        <Button fullWidth variant="secondary" onClick={() => router.push("/bookings")}>
+          Мои записи
+        </Button>
+      </div>
+
+      {/* Footer */}
+      <div className="mt-auto pt-8 text-center text-[var(--tg-theme-hint-color)] text-sm">
+        Отмена и перенос возможны за {trainer?.cancelCutoffHours}ч до начала
+      </div>
     </div>
   );
 }
