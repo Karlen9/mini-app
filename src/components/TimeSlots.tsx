@@ -18,7 +18,9 @@ export function TimeSlots({ slots, selectedTime, onSelectTime, isLoading }: Time
     );
   }
 
-  if (slots.length === 0) {
+  const availableSlots = slots.filter((s) => s.available);
+
+  if (slots.length === 0 || availableSlots.length === 0) {
     return (
       <div className="text-center py-8 text-[var(--tg-theme-hint-color)]">
         Нет доступного времени
@@ -26,35 +28,34 @@ export function TimeSlots({ slots, selectedTime, onSelectTime, isLoading }: Time
     );
   }
 
-  const availableSlots = slots.filter((s) => s.available);
-
-  if (availableSlots.length === 0) {
-    return (
-      <div className="text-center py-8 text-[var(--tg-theme-hint-color)]">
-        Все время занято на этот день
-      </div>
-    );
-  }
-
   return (
-    <div className="grid grid-cols-4 gap-2">
-      {slots.map((slot) => (
-        <button
-          key={slot.time}
-          onClick={() => slot.available && onSelectTime(slot.time)}
-          disabled={!slot.available}
-          className={`
-            py-3 px-2 rounded-lg text-sm font-medium transition-all
-            ${!slot.available ? "opacity-30 line-through cursor-not-allowed" : "active:scale-95"}
-            ${selectedTime === slot.time
-              ? "bg-[var(--tg-theme-button-color)] text-[var(--tg-theme-button-text-color)]"
-              : "bg-[var(--tg-theme-secondary-bg-color)]"
-            }
-          `}
-        >
-          {slot.time}
-        </button>
-      ))}
+    <div>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <span className="font-semibold text-lg">Выберите время</span>
+        <span className="text-sm text-[var(--tg-theme-hint-color)]">
+          {availableSlots.length} слотов
+        </span>
+      </div>
+
+      {/* Time grid - 3 columns */}
+      <div className="grid grid-cols-3 gap-3">
+        {availableSlots.map((slot) => (
+          <button
+            key={slot.time}
+            onClick={() => onSelectTime(slot.time)}
+            className={`
+              py-3 px-4 rounded-full text-sm font-medium transition-all active:scale-95
+              ${selectedTime === slot.time
+                ? "bg-[var(--tg-theme-button-color)] text-[var(--tg-theme-button-text-color)]"
+                : "bg-[var(--tg-theme-secondary-bg-color)] border border-transparent hover:border-[var(--tg-theme-button-color)]"
+              }
+            `}
+          >
+            {slot.time}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

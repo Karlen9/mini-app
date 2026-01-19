@@ -3,22 +3,19 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
-import { SessionType, TimeSlot, WorkingHours } from "@/lib/types";
-import { Button } from "@/components/Button";
+import { SessionType, TimeSlot, WorkingHours, Trainer } from "@/lib/types";
 import { Card } from "@/components/Card";
-import { Calendar } from "@/components/Calendar";
+import { WeekCalendar } from "@/components/WeekCalendar";
 import { TimeSlots } from "@/components/TimeSlots";
 import { Loading } from "@/components/Loading";
 import { getTelegramWebApp } from "@/lib/telegram";
 
-type Step = "service" | "date" | "time" | "confirm";
-
 export default function BookPage() {
   const router = useRouter();
-  const [step, setStep] = useState<Step>("service");
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const [trainer, setTrainer] = useState<Trainer | null>(null);
   const [sessionTypes, setSessionTypes] = useState<SessionType[]>([]);
   const [workingHours, setWorkingHours] = useState<WorkingHours[]>([]);
   const [slots, setSlots] = useState<TimeSlot[]>([]);
@@ -33,15 +30,7 @@ export default function BookPage() {
     webApp?.BackButton.show();
 
     const handleBack = () => {
-      if (step === "service") {
-        router.push("/");
-      } else if (step === "date") {
-        setStep("service");
-      } else if (step === "time") {
-        setStep("date");
-      } else if (step === "confirm") {
-        setStep("time");
-      }
+      router.push("/");
     };
 
     webApp?.BackButton.onClick(handleBack);
@@ -50,43 +39,35 @@ export default function BookPage() {
       webApp?.BackButton.offClick(handleBack);
       webApp?.BackButton.hide();
     };
-  }, [step, router]);
+  }, [router]);
 
   useEffect(() => {
-    Promise.all([api.getSessionTypes(), api.getWorkingHours()]).then(
-      ([types, hours]) => {
-        setSessionTypes(types);
-        setWorkingHours(hours);
-        setIsLoading(false);
+    Promise.all([
+      api.getTrainer(),
+      api.getSessionTypes(),
+      api.getWorkingHours()
+    ]).then(([t, types, hours]) => {
+      setTrainer(t);
+      setSessionTypes(types);
+      setWorkingHours(hours);
+      // Auto-select first service
+      if (types.length > 0) {
+        setSelectedService(types[0]);
       }
-    );
+      setIsLoading(false);
+    });
   }, []);
 
   useEffect(() => {
     if (selectedDate && selectedService) {
       setSlotsLoading(true);
+      setSelectedTime(null);
       api.getAvailableSlots(selectedDate, selectedService.id).then((s) => {
         setSlots(s);
         setSlotsLoading(false);
       });
     }
   }, [selectedDate, selectedService]);
-
-  const handleSelectService = (service: SessionType) => {
-    setSelectedService(service);
-    setStep("date");
-  };
-
-  const handleSelectDate = (date: string) => {
-    setSelectedDate(date);
-    setSelectedTime(null);
-    setStep("time");
-  };
-
-  const handleSelectTime = (time: string) => {
-    setSelectedTime(time);
-    setStep("confirm");
-  };
 
   const handleConfirm = async () => {
     if (!selectedService || !selectedDate || !selectedTime) return;
@@ -108,17 +89,8 @@ export default function BookPage() {
     return `${price} ${currency}`;
   };
 
-  const formatSelectedDate = (): string => {
-    if (!selectedDate) return "";
-    const d = new Date(selectedDate);
-    const MONTHS = [
-      "января", "февраля", "марта", "апреля", "мая", "июня",
-      "июля", "августа", "сентября", "октября", "ноября", "декабря"
-    ];
-    return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
-  };
-
   const workingDays = workingHours.map((wh) => wh.dayOfWeek);
+  const canBook = selectedService && selectedDate && selectedTime;
 
   if (isLoading) {
     return (
@@ -129,94 +101,96 @@ export default function BookPage() {
   }
 
   return (
-    <div className="min-h-screen p-4">
-      {/* Step: Select Service */}
-      {step === "service" && (
-        <>
-          <h1 className="text-xl font-bold mb-4">Выберите услугу</h1>
-          <div className="flex flex-col gap-3">
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex flex-col">
+      {/* Trainer Header */}
+      <div className="relative px-4 pt-4 pb-6">
+        <div className="flex items-start justify-between">
+          <div className="flex-1">
+            <div className="flex items-center gap-1 mb-2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="#FFD700">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+              </svg>
+              <span className="text-sm font-medium">4.9</span>
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900">{trainer?.name}</h1>
+            <p className="text-gray-500">Фитнес тренер</p>
+          </div>
+          {/* Trainer avatar placeholder */}
+          <div className="w-28 h-28 rounded-2xl bg-gradient-to-br from-blue-100 to-blue-200 flex items-center justify-center overflow-hidden">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="1.5">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 bg-white rounded-t-3xl px-4 pt-6 pb-24">
+        {/* Service Selection */}
+        <div className="mb-6">
+          <span className="font-semibold text-lg block mb-3">Услуга</span>
+          <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4">
             {sessionTypes.map((service) => (
-              <Card key={service.id} onClick={() => handleSelectService(service)}>
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="font-semibold">{service.name}</h3>
-                    <p className="text-sm text-[var(--tg-theme-hint-color)]">
-                      {service.durationMinutes} мин.
-                    </p>
-                  </div>
-                  <span className="font-semibold">
-                    {formatPrice(service.price, service.currency)}
-                  </span>
-                </div>
-              </Card>
+              <button
+                key={service.id}
+                onClick={() => setSelectedService(service)}
+                className={`
+                  flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-all
+                  ${selectedService?.id === service.id
+                    ? "bg-[var(--tg-theme-button-color)] text-white"
+                    : "bg-gray-100 text-gray-700"
+                  }
+                `}
+              >
+                {service.name} - {formatPrice(service.price, service.currency)}
+              </button>
             ))}
           </div>
-        </>
-      )}
+        </div>
 
-      {/* Step: Select Date */}
-      {step === "date" && (
-        <>
-          <h1 className="text-xl font-bold mb-1">Выберите дату</h1>
-          <p className="text-sm text-[var(--tg-theme-hint-color)] mb-4">
-            {selectedService?.name}
-          </p>
-          <Calendar
+        {/* Week Calendar */}
+        <div className="mb-6">
+          <WeekCalendar
             selectedDate={selectedDate}
-            onSelectDate={handleSelectDate}
+            onSelectDate={setSelectedDate}
             workingDays={workingDays}
           />
-        </>
-      )}
+        </div>
 
-      {/* Step: Select Time */}
-      {step === "time" && (
-        <>
-          <h1 className="text-xl font-bold mb-1">Выберите время</h1>
-          <p className="text-sm text-[var(--tg-theme-hint-color)] mb-4">
-            {selectedService?.name}, {formatSelectedDate()}
-          </p>
+        {/* Time Slots */}
+        {selectedDate && (
           <TimeSlots
             slots={slots}
             selectedTime={selectedTime}
-            onSelectTime={handleSelectTime}
+            onSelectTime={setSelectedTime}
             isLoading={slotsLoading}
           />
-        </>
-      )}
+        )}
 
-      {/* Step: Confirm */}
-      {step === "confirm" && selectedService && (
-        <>
-          <h1 className="text-xl font-bold mb-4">Подтверждение</h1>
-          <Card>
-            <div className="flex flex-col gap-3">
-              <div>
-                <p className="text-sm text-[var(--tg-theme-hint-color)]">Услуга</p>
-                <p className="font-semibold">{selectedService.name}</p>
-              </div>
-              <div>
-                <p className="text-sm text-[var(--tg-theme-hint-color)]">Дата и время</p>
-                <p className="font-semibold">{formatSelectedDate()}, {selectedTime}</p>
-              </div>
-              <div>
-                <p className="text-sm text-[var(--tg-theme-hint-color)]">Длительность</p>
-                <p className="font-semibold">{selectedService.durationMinutes} мин.</p>
-              </div>
-              <div>
-                <p className="text-sm text-[var(--tg-theme-hint-color)]">Стоимость</p>
-                <p className="font-semibold">{formatPrice(selectedService.price, selectedService.currency)}</p>
-              </div>
-            </div>
-          </Card>
-
-          <div className="mt-6">
-            <Button fullWidth onClick={handleConfirm} disabled={isSubmitting}>
-              {isSubmitting ? "Записываем..." : "Подтвердить запись"}
-            </Button>
+        {!selectedDate && (
+          <div className="text-center py-8 text-[var(--tg-theme-hint-color)]">
+            Выберите дату для просмотра доступного времени
           </div>
-        </>
-      )}
+        )}
+      </div>
+
+      {/* Fixed Bottom Button */}
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-100">
+        <button
+          onClick={handleConfirm}
+          disabled={!canBook || isSubmitting}
+          className={`
+            w-full py-4 rounded-full text-base font-semibold transition-all
+            ${canBook && !isSubmitting
+              ? "bg-[var(--tg-theme-button-color)] text-white active:scale-[0.98]"
+              : "bg-gray-200 text-gray-400 cursor-not-allowed"
+            }
+          `}
+        >
+          {isSubmitting ? "Записываем..." : "Записаться"}
+        </button>
+      </div>
     </div>
   );
 }
